@@ -93,7 +93,9 @@ COPY assets/start.sh /root/start.sh
 RUN chmod +x /root/x11vnc-session.sh /root/start.sh
 
 # Update and install additional dependencies
-RUN apk update && apk add samba-winbind wine && ln -s /usr/bin/wine64 /usr/bin/wine
+RUN apk update
+RUN apk add --no-cache wine --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community \
+    samba-winbind && ln -s /usr/bin/wine64 /usr/bin/wine || true
 
 COPY assets/healthcheck.sh /usr/local/bin/healthcheck.sh
 RUN chmod +x /usr/local/bin/healthcheck.sh
