@@ -1,4 +1,4 @@
-FROM alpine:3.15 AS st-builder
+FROM alpine:3.19 AS st-builder
 
 RUN apk add --no-cache make gcc git freetype-dev \
             fontconfig-dev musl-dev xproto libx11-dev \
@@ -7,37 +7,40 @@ RUN git clone https://github.com/DenisKramer/st.git /work
 WORKDIR /work
 RUN make
 
-FROM alpine:3.15 AS xdummy-builder
+FROM alpine:3.19 AS xdummy-builder
 
 RUN apk add --no-cache make gcc freetype-dev \
             fontconfig-dev musl-dev xproto libx11-dev \
-            libxft-dev libxext-dev avahi-libs libcrypto3 libssl3 libvncserver libx11 libxdamage libxext libxfixes libxi libxinerama libxrandr libxtst musl samba-winbind 
+            libxft-dev libxext-dev avahi-libs libcrypto3 libssl3 libvncserver libx11 libxdamage libxext libxfixes libxi libxinerama libxrandr libxtst musl samba-winbind bash
 RUN apk add --no-cache linux-headers
-RUN apk add x11vnc 
+RUN apk add x11vnc
 RUN Xdummy -install
 
 # ----------------------------------------------------------------------------
 
 FROM ejtrader/pyzmq:dev
 
+# Metadata labels
+LABEL maintainer="Andreas Pappas"
+LABEL version="1.0"
+LABEL description="Custom Docker image for running Metatrader with GUI support on Alpine Linux"
+
 USER root
 ENV WINEPREFIX=/root/.wine
 ENV WINEARCH=win64
 ENV DISPLAY :0
 ENV USER=root
-ENV PASSWORD=root
+ENV PASSWORD=mypassword
 
-
-# Basic init and admin tools
-RUN apk --no-cache add supervisor sudo wget \
+# Basic init and admin tools, including bash
+RUN apk --no-cache add supervisor sudo wget bash \
     && echo "$USER:$PASSWORD" | /usr/sbin/chpasswd \
     && rm -rf /apk /tmp/* /var/cache/apk/*
 
 # Install X11 server and dummy device
 RUN apk add --no-cache xorg-server xf86-video-dummy \
-    && apk add libressl3.1-libcrypto --no-cache --repository http://dl-3.alpinelinux.org/alpine/edge/main/ \
-    && apk add libressl3.1-libssl --no-cache --repository http://dl-3.alpinelinux.org/alpine/edge/main/ \
-    && apk add x11vnc --no-cache --repository http://dl-3.alpinelinux.org/alpine/edge/community/ \
+    && apk add libressl --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/main/ \
+    && apk add x11vnc --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community/ \
     && rm -rf /apk /tmp/* /var/cache/apk/*
 COPY --from=xdummy-builder /usr/bin/Xdummy.so /usr/bin/Xdummy.so
 COPY assets/xorg.conf /etc/X11/xorg.conf
@@ -47,7 +50,7 @@ COPY assets/xorg.conf.d /etc/X11/xorg.conf.d
 COPY assets/supervisord.conf /etc/supervisord.conf
 
 # Openbox window manager
-RUN apk --no-cache add openbox  \
+RUN apk --no-cache add openbox \
     && rm -rf /apk /tmp/* /var/cache/apk/*
 COPY assets/openbox/mayday/mayday-arc /usr/share/themes/mayday-arc
 COPY assets/openbox/mayday/mayday-arc-dark /usr/share/themes/mayday-arc-dark
@@ -57,6 +60,7 @@ COPY assets/openbox/mayday/thesis /usr/share/themes/thesis
 COPY assets/openbox/rc.xml /etc/xdg/openbox/rc.xml
 COPY assets/openbox/menu.xml /etc/xdg/openbox/menu.xml
 COPY Metatrader /root/Metatrader
+
 # Login Manager
 RUN apk --no-cache add slim consolekit \
     && rm -rf /apk /tmp/* /var/cache/apk/*
@@ -69,9 +73,7 @@ RUN apk add --no-cache font-noto \
     && rm -rf /apk /tmp/* /var/cache/apk/*
 COPY assets/fonts.conf /etc/fonts/fonts.conf
 
-
-
-# st  as terminal
+# st as terminal
 RUN apk add --no-cache freetype fontconfig xproto libx11 libxft libxext ncurses \
     && rm -rf /apk /tmp/* /var/cache/apk/*
 COPY --from=st-builder /work/st /usr/bin/st
@@ -87,14 +89,18 @@ COPY assets/xinit/xinitrc.d /etc/X11/xinit/xinitrc.d
 COPY assets/x11vnc-session.sh /root/x11vnc-session.sh
 COPY assets/start.sh /root/start.sh
 
+# Ensure scripts are executable
+RUN chmod +x /root/x11vnc-session.sh /root/start.sh
 
+# Update and install additional dependencies
 RUN apk update && apk add samba-winbind wine && ln -s /usr/bin/wine64 /usr/bin/wine
 
-
-
+COPY assets/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/healthcheck.sh
+# Healthcheck (optional, based on your previous request)
+HEALTHCHECK --interval=1m --timeout=10s --start-period=1m --retries=3 \
+CMD /usr/local/bin/healthcheck.sh
 
 WORKDIR /$HOME/
 EXPOSE 5900 15555 15556 15557 15558
 CMD ["/usr/bin/supervisord","-c","/etc/supervisord.conf"]
-
-
