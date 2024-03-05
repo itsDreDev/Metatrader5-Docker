@@ -18,8 +18,8 @@ RUN Xdummy -install
 
 # ----------------------------------------------------------------------------
 
-FROM ejtrader/pyzmq:dev
-
+#FROM ejtrader/pyzmq:dev
+FROM alpine:3.19 
 # Metadata labels
 LABEL maintainer="Andreas Pappas"
 LABEL version="1.0"
